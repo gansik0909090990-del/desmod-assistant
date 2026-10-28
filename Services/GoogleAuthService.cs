@@ -41,6 +41,11 @@ public sealed class GoogleAuthService
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(3));
         var context = await listener.GetContextAsync().WaitAsync(timeout.Token);
+        // HttpListener disposes the request together with its response. Read every
+        // callback value before closing the browser response.
+        var returnedState = context.Request.QueryString["state"];
+        var authorizationCode = context.Request.QueryString["code"];
+        var authorizationError = context.Request.QueryString["error"];
         var responseHtml = "<html><body style='font-family:Segoe UI;background:#0a0d16;color:white;text-align:center;padding:80px'><h2>Вход выполнен</h2><p>Можно закрыть эту вкладку и вернуться в Desmod Assistant.</p></body></html>";
         var responseBytes = Encoding.UTF8.GetBytes(responseHtml);
         context.Response.ContentType = "text/html; charset=utf-8";
@@ -48,9 +53,8 @@ public sealed class GoogleAuthService
         await context.Response.OutputStream.WriteAsync(responseBytes, timeout.Token);
         context.Response.Close();
 
-        var query = context.Request.QueryString;
-        if (query["state"] != state) throw new InvalidOperationException("Проверка Google state не пройдена");
-        var code = query["code"] ?? throw new InvalidOperationException(query["error"] ?? "Google не вернул код входа");
+        if (returnedState != state) throw new InvalidOperationException("Проверка Google state не пройдена");
+        var code = authorizationCode ?? throw new InvalidOperationException(authorizationError ?? "Google не вернул код входа");
         using var tokenResponse = await _http.PostAsync("https://oauth2.googleapis.com/token", new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["client_id"] = clientId,
@@ -65,7 +69,9 @@ public sealed class GoogleAuthService
         var infoJson = await _http.GetStringAsync("https://oauth2.googleapis.com/tokeninfo?id_token=" + Uri.EscapeDataString(idToken), timeout.Token);
         using var info = JsonDocument.Parse(infoJson);
         var email = info.RootElement.GetProperty("email").GetString() ?? throw new InvalidOperationException("Email не получен");
-        var verified = info.RootElement.TryGetProperty("email_verified", out var verifiedElement) && verifiedElement.GetString() == "true";
+        var verified = info.RootElement.TryGetProperty("email_verified", out var verifiedElement) &&
+            (verifiedElement.ValueKind == JsonValueKind.True ||
+             (verifiedElement.ValueKind == JsonValueKind.String && verifiedElement.GetString() == "true"));
         if (!verified) throw new InvalidOperationException("Google email не подтверждён");
         var name = info.RootElement.TryGetProperty("name", out var nameElement) ? nameElement.GetString() ?? email : email;
         return new UserSession(email, name, roleResolver(email));

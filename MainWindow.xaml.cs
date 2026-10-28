@@ -100,6 +100,8 @@ public partial class MainWindow : Window
         RootGrid.Opacity = 1;
         Dispatcher.BeginInvoke(async () =>
         {
+            if (args.Any(value => value.Equals("--open-microphone-dropdown", StringComparison.OrdinalIgnoreCase)))
+                MicrophoneCombo.IsDropDownOpen = true;
             await Task.Delay(600);
             UpdateLayout();
             var width = Math.Max(1, (int)ActualWidth);
@@ -182,9 +184,9 @@ public partial class MainWindow : Window
             CommandInput.CaretIndex = CommandInput.Text.Length;
             var wakeWord = _settings.WakeWord.Trim();
             var index = text.IndexOf(wakeWord, StringComparison.OrdinalIgnoreCase);
-            if (index < 0) return;
-
-            var command = text.Remove(index, wakeWord.Length).Trim(' ', ',', '.', '!', '?', ':', '-');
+            var command = index >= 0
+                ? text.Remove(index, wakeWord.Length).Trim(' ', ',', '.', '!', '?', ':', '-')
+                : text.Trim(' ', ',', '.', '!', '?', ':', '-');
             if (string.IsNullOrWhiteSpace(command))
             {
                 ListeningTitle.Text = "Слушаю команду";
@@ -388,6 +390,15 @@ public partial class MainWindow : Window
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(_settings.GoogleClientId))
+            {
+                AccountTitle.Text = "Требуется настройка Google";
+                AccountDetails.Text = "Открыл страницу создания OAuth Client ID. После создания вставьте его в настройках приложения.";
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://console.cloud.google.com/apis/credentials") { UseShellExecute = true });
+                Navigate(3, SettingsNav);
+                GoogleClientIdInput.Focus();
+                return;
+            }
             GoogleLoginButton.IsEnabled = false;
             AccountTitle.Text = "Ожидаю вход Google…";
             _currentUser = await _googleAuthService.SignInAsync(_settings.GoogleClientId, _supportService.ResolveRole);

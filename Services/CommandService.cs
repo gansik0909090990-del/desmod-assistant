@@ -6,6 +6,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using DesmodAssistant.Models;
 
@@ -54,13 +55,12 @@ public sealed class CommandService
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CapCut", "Apps", "CapCut.exe")
             });
 
-        if (ContainsAny(command, "скриншот", "снимок экрана", "скрин экрана", "заскринь", "сделай скрин"))
+        if (ContainsAny(command, "скриншот", "скриншоты", "снимок экрана", "скрин экрана", "заскринь", "сделай скрин"))
             return CaptureScreenshot();
 
-        if (ContainsAny(command, "начни запись", "запусти запись", "nvidia запись", "запись экрана"))
+        if (ContainsAny(command, "начни запись", "включи запись", "запусти запись", "nvidia запись", "запись экрана", "запись видео"))
         {
-            SendKeys.SendWait("%{F9}");
-            return new(true, "Переключаю запись NVIDIA");
+            return ToggleNvidiaRecording();
         }
 
         if (command.StartsWith("открой сайт ") || command.StartsWith("перейди на "))
@@ -197,13 +197,39 @@ public sealed class CommandService
             Directory.CreateDirectory(folder);
             var path = Path.Combine(folder, $"Screenshot-{DateTime.Now:yyyy-MM-dd-HH-mm-ss}.png");
             bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
-            return new(true, "Скриншот сохранён в папке Изображения — Desmod Assistant");
+            if (!File.Exists(path) || new FileInfo(path).Length == 0)
+                return new(false, "Windows не сохранила файл скриншота");
+            return new(true, $"Скриншот сохранён: {path}");
         }
         catch (Exception ex)
         {
             return new(false, "Не удалось сделать скриншот: " + ex.Message);
         }
     }
+
+    private static CommandResult ToggleNvidiaRecording()
+    {
+        try
+        {
+            const byte alt = 0x12;
+            const byte f9 = 0x78;
+            const uint keyUp = 0x0002;
+            keybd_event(alt, 0, 0, UIntPtr.Zero);
+            Thread.Sleep(40);
+            keybd_event(f9, 0, 0, UIntPtr.Zero);
+            Thread.Sleep(40);
+            keybd_event(f9, 0, keyUp, UIntPtr.Zero);
+            keybd_event(alt, 0, keyUp, UIntPtr.Zero);
+            return new(true, "Нажимаю Alt+F9 — запись NVIDIA переключена");
+        }
+        catch (Exception ex)
+        {
+            return new(false, "Не удалось переключить запись NVIDIA: " + ex.Message);
+        }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
 
     private static CommandResult OpenUrl(string url, string message)
     {

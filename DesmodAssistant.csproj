@@ -9,8 +9,9 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>Desmod.Assistant</AssemblyName>
     <RootNamespace>DesmodAssistant</RootNamespace>
-    <Version>1.1.1</Version>
+    <Version>1.1.2</Version>
     <DefaultItemExcludes>$(DefaultItemExcludes);publish\**;release\**;artifacts\**;model-cache\**</DefaultItemExcludes>
+    <GoogleOAuthClientId>675488933296-8b4rh2lndbfcjfpun01fe2ub20kvctbu.apps.googleusercontent.com</GoogleOAuthClientId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,6 +22,13 @@
 
   <ItemGroup Condition="Exists('SpeechModels')">
     <Content Include="SpeechModels\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>GoogleOAuthClientId</_Parameter1>
+      <_Parameter2>$(GoogleOAuthClientId)</_Parameter2>
+    </AssemblyAttribute>
   </ItemGroup>
 
 </Project>

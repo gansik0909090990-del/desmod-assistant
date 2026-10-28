@@ -274,7 +274,6 @@ public partial class MainWindow : Window
         EndpointInput.Text = _settings.AiEndpoint;
         ModelInput.Text = _settings.AiModel;
         ApiKeyInput.Password = _settings.AiApiKey;
-        GoogleClientIdInput.Text = _settings.GoogleClientId;
         SupportBackendInput.Text = _settings.SupportBackendUrl;
         VoiceCombo.ItemsSource = _speechService.GetVoices();
         VoiceCombo.SelectedItem = string.IsNullOrWhiteSpace(_settings.VoiceName) ? VoiceCombo.Items.Cast<object>().FirstOrDefault() : _settings.VoiceName;
@@ -305,7 +304,6 @@ public partial class MainWindow : Window
         _settings.AiEndpoint = EndpointInput.Text.Trim();
         _settings.AiModel = ModelInput.Text.Trim();
         _settings.AiApiKey = ApiKeyInput.Password;
-        _settings.GoogleClientId = GoogleClientIdInput.Text.Trim();
         _settings.SupportBackendUrl = SupportBackendInput.Text.Trim();
         _settingsService.Save(_settings);
         ConfigureStartup();
@@ -390,18 +388,16 @@ public partial class MainWindow : Window
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(_settings.GoogleClientId))
+            var googleClientId = BuildConfiguration.GoogleOAuthClientId;
+            if (string.IsNullOrWhiteSpace(googleClientId))
             {
-                AccountTitle.Text = "Требуется настройка Google";
-                AccountDetails.Text = "Открыл страницу создания OAuth Client ID. После создания вставьте его в настройках приложения.";
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://console.cloud.google.com/apis/credentials") { UseShellExecute = true });
-                Navigate(3, SettingsNav);
-                GoogleClientIdInput.Focus();
+                AccountTitle.Text = "Вход временно недоступен";
+                AccountDetails.Text = "Разработчик ещё не подключил Google к этой сборке. Пользователю ничего настраивать не нужно.";
                 return;
             }
             GoogleLoginButton.IsEnabled = false;
             AccountTitle.Text = "Ожидаю вход Google…";
-            _currentUser = await _googleAuthService.SignInAsync(_settings.GoogleClientId, _supportService.ResolveRole);
+            _currentUser = await _googleAuthService.SignInAsync(googleClientId, _supportService.ResolveRole);
             AccountTitle.Text = _currentUser.Name;
             AccountDetails.Text = $"{_currentUser.Email} · роль: {_currentUser.Role}";
             GoogleLoginButton.Content = "Сменить аккаунт";

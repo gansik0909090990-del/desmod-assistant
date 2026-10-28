@@ -4,5 +4,7 @@ obj/
 publish/
 artifacts/
 release/
+model-cache/
+SpeechModels/
 *.user
 *.suo

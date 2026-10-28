@@ -17,10 +17,15 @@ jobs:
           dotnet-version: 8.0.x
       - name: Restore
         run: dotnet restore
+      - name: Download Russian offline speech model
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip -OutFile vosk-ru.zip
+          Expand-Archive vosk-ru.zip -DestinationPath SpeechModels
       - name: Build
         run: dotnet build -c Release --no-restore
       - name: Publish standalone EXE
-        run: dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/win-x64
+        run: dotnet publish -c Release -r win-x64 --self-contained true -o publish/win-x64
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
         with:

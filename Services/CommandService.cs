@@ -84,7 +84,16 @@ public sealed class CommandService
         if (!string.IsNullOrWhiteSpace(settings.AiApiKey))
             return await AskAiAsync(rawCommand, settings);
 
-        return new(false, "Команда пока не распознана. Добавьте ключ ИИ в настройках или сформулируйте иначе");
+        var freeTarget = ExtractAfter(command, "открой", "запусти", "найди", "покажи");
+        if (!string.IsNullOrWhiteSpace(freeTarget))
+        {
+            var openIntent = command.Contains("открой", StringComparison.OrdinalIgnoreCase) || command.Contains("запусти", StringComparison.OrdinalIgnoreCase);
+            var search = openIntent ? freeTarget + " официальный сайт" : freeTarget;
+            var lucky = openIntent ? "&btnI=1" : "";
+            return OpenUrl($"https://www.google.com/search?q={Uri.EscapeDataString(search)}{lucky}", openIntent ? $"Открываю: {freeTarget}" : $"Ищу: {freeTarget}");
+        }
+
+        return new(false, "Для свободного понимания любых команд подключите ИИ-провайдера в настройках");
     }
 
     private async Task<CommandResult> AskAiAsync(string command, AssistantSettings settings)
@@ -96,7 +105,7 @@ public sealed class CommandService
             request.Content = new StringContent(JsonSerializer.Serialize(new
             {
                 model = settings.AiModel,
-                input = "Ты голосовой Windows-помощник. Ответь кратко по-русски. Если действие нельзя выполнить локально, объясни это. Запрос: " + command
+                input = "Ты планировщик действий Windows-ассистента. Понимай свободную русскую речь. Верни ТОЛЬКО JSON без markdown: {\"action\":\"open_url|search_web|launch_app|screenshot|answer\",\"target\":\"...\",\"reply\":\"короткий ответ по-русски\"}. Для сайтов выбирай официальный URL. Для программ action launch_app и обычное название. Не предлагай shell-команды, удаление, пароли или обход защиты. Запрос пользователя: " + command
             }), Encoding.UTF8, "application/json");
             using var response = await _http.SendAsync(request);
             var json = await response.Content.ReadAsStringAsync();
@@ -105,11 +114,73 @@ public sealed class CommandService
             var text = document.RootElement.TryGetProperty("output_text", out var direct)
                 ? direct.GetString()
                 : document.RootElement.GetProperty("output")[0].GetProperty("content")[0].GetProperty("text").GetString();
-            return new(true, text ?? "Ответ получен");
+            return ExecuteAiPlan(text ?? "", command);
         }
         catch (Exception ex)
         {
             return new(false, "Не удалось обратиться к ИИ: " + ex.Message);
+        }
+    }
+
+    private CommandResult ExecuteAiPlan(string rawPlan, string originalCommand)
+    {
+        try
+        {
+            var start = rawPlan.IndexOf('{');
+            var end = rawPlan.LastIndexOf('}');
+            if (start < 0 || end <= start) return new(true, rawPlan);
+            using var plan = JsonDocument.Parse(rawPlan[start..(end + 1)]);
+            var root = plan.RootElement;
+            var action = root.TryGetProperty("action", out var actionElement) ? actionElement.GetString() ?? "answer" : "answer";
+            var target = root.TryGetProperty("target", out var targetElement) ? targetElement.GetString() ?? "" : "";
+            var reply = root.TryGetProperty("reply", out var replyElement) ? replyElement.GetString() ?? "Готово" : "Готово";
+
+            return action switch
+            {
+                "open_url" when Uri.TryCreate(target, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" => OpenUrl(target, reply),
+                "search_web" => OpenUrl($"https://www.google.com/search?q={Uri.EscapeDataString(target)}", reply),
+                "launch_app" => OpenAnyApp(target, reply),
+                "screenshot" => CaptureScreenshot(),
+                _ => new(true, string.IsNullOrWhiteSpace(reply) ? originalCommand : reply)
+            };
+        }
+        catch
+        {
+            return new(true, rawPlan);
+        }
+    }
+
+    private static CommandResult OpenAnyApp(string target, string reply)
+    {
+        if (string.IsNullOrWhiteSpace(target)) return new(false, "ИИ не указал приложение");
+        var roots = new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
+            Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu)
+        };
+        foreach (var root in roots.Where(Directory.Exists))
+        {
+            try
+            {
+                var match = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                    .FirstOrDefault(path => Path.GetFileNameWithoutExtension(path).Contains(target, StringComparison.OrdinalIgnoreCase)
+                                            && Path.GetExtension(path) is ".lnk" or ".url" or ".exe");
+                if (match is null) continue;
+                Process.Start(new ProcessStartInfo(match) { UseShellExecute = true });
+                return new(true, reply);
+            }
+            catch { }
+        }
+        try
+        {
+            Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+            return new(true, reply);
+        }
+        catch
+        {
+            return OpenUrl($"https://www.google.com/search?q={Uri.EscapeDataString(target + " скачать официальный сайт")}", $"Приложение не найдено — открываю официальный поиск: {target}");
         }
     }
 

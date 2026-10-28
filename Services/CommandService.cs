@@ -54,7 +54,7 @@ public sealed class CommandService
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CapCut", "Apps", "CapCut.exe")
             });
 
-        if (ContainsAny(command, "сделай скриншот", "снимок экрана", "скрин экрана"))
+        if (ContainsAny(command, "скриншот", "снимок экрана", "скрин экрана", "заскринь", "сделай скрин"))
             return CaptureScreenshot();
 
         if (ContainsAny(command, "начни запись", "запусти запись", "nvidia запись", "запись экрана"))
@@ -88,9 +88,10 @@ public sealed class CommandService
         if (!string.IsNullOrWhiteSpace(freeTarget))
         {
             var openIntent = command.Contains("открой", StringComparison.OrdinalIgnoreCase) || command.Contains("запусти", StringComparison.OrdinalIgnoreCase);
+            if (openIntent && TryResolveKnownWebsite(freeTarget, out var directUrl))
+                return OpenUrl(directUrl, $"Открываю: {freeTarget}");
             var search = openIntent ? freeTarget + " официальный сайт" : freeTarget;
-            var lucky = openIntent ? "&btnI=1" : "";
-            return OpenUrl($"https://www.google.com/search?q={Uri.EscapeDataString(search)}{lucky}", openIntent ? $"Открываю: {freeTarget}" : $"Ищу: {freeTarget}");
+            return OpenUrl($"https://www.google.com/search?q={Uri.EscapeDataString(search)}", openIntent ? $"Показываю официальный результат: {freeTarget}" : $"Ищу: {freeTarget}");
         }
 
         return new(false, "Для свободного понимания любых команд подключите ИИ-провайдера в настройках");
@@ -275,6 +276,41 @@ public sealed class CommandService
             if (index >= 0) query = query[..index];
         }
         return query.Trim(' ', ',', '.', '!', '?');
+    }
+
+    private static bool TryResolveKnownWebsite(string target, out string url)
+    {
+        var normalized = target.ToLowerInvariant()
+            .Replace("ё", "е")
+            .Replace("официальный сайт", "")
+            .Trim(' ', ',', '.', '!', '?');
+
+        var sites = new (string[] Aliases, string Url)[]
+        {
+            (new[] { "яндекс музыка", "яндекс музыку", "yandex music" }, "https://music.yandex.ru/"),
+            (new[] { "рутуб", "rutube" }, "https://rutube.ru/"),
+            (new[] { "ютуб", "youtube" }, "https://www.youtube.com/"),
+            (new[] { "вконтакте", "в контакте", "вк", "vk" }, "https://vk.com/"),
+            (new[] { "телеграм", "telegram" }, "https://web.telegram.org/"),
+            (new[] { "яндекс", "yandex" }, "https://ya.ru/"),
+            (new[] { "гугл", "google" }, "https://www.google.com/"),
+            (new[] { "твич", "twitch" }, "https://www.twitch.tv/"),
+            (new[] { "кион", "kion" }, "https://kion.ru/"),
+            (new[] { "кинопоиск", "kinopoisk" }, "https://www.kinopoisk.ru/"),
+            (new[] { "озон", "ozon" }, "https://www.ozon.ru/"),
+            (new[] { "вайлдберриз", "wildberries" }, "https://www.wildberries.ru/")
+        };
+
+        foreach (var site in sites)
+        {
+            if (!site.Aliases.Any(alias => normalized.Equals(alias, StringComparison.OrdinalIgnoreCase) ||
+                                           normalized.Contains(alias, StringComparison.OrdinalIgnoreCase))) continue;
+            url = site.Url;
+            return true;
+        }
+
+        url = "";
+        return false;
     }
 
     private static bool ContainsAny(string value, params string[] options) =>

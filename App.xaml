@@ -1,0 +1,14 @@
+﻿<Application x:Class="DesmodAssistant.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:DesmodAssistant"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <FontFamily x:Key="UiFont">Segoe UI Variable Display, Segoe UI</FontFamily>
+        <SolidColorBrush x:Key="AccentBrush" Color="#7C5CFF"/>
+        <SolidColorBrush x:Key="AccentLightBrush" Color="#A793FF"/>
+        <SolidColorBrush x:Key="PanelBrush" Color="#D9121724"/>
+        <SolidColorBrush x:Key="TextBrush" Color="#F5F7FF"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#AAB3C5"/>
+    </Application.Resources>
+</Application>

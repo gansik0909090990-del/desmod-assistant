@@ -190,7 +190,6 @@ public partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(command))
             {
                 ListeningTitle.Text = "Слушаю команду";
-                _speechService.Speak("Слушаю");
                 return;
             }
 
@@ -236,7 +235,6 @@ public partial class MainWindow : Window
         ListeningTitle.Text = result.Success ? "Готово" : "Не получилось";
         TranscriptText.Text = result.Message;
         TopStatusText.Text = result.Success ? "Команда выполнена" : "Нужна помощь";
-        _speechService.Speak(result.Message);
     }
 
     private void ExecuteCommand_OnClick(object sender, RoutedEventArgs e) => _ = ExecuteCommandAsync(CommandInput.Text);
@@ -265,20 +263,13 @@ public partial class MainWindow : Window
         WakeWordInput.Text = _settings.WakeWord;
         WakeWordPreview.Text = $"«{_settings.WakeWord}»";
         ContinuousListeningCheck.IsChecked = _settings.ListenContinuously;
-        SpeakResponsesCheck.IsChecked = _settings.SpeakResponses;
         ConfirmSensitiveCheck.IsChecked = _settings.ConfirmSensitiveActions;
         LaunchAtStartupCheck.IsChecked = _settings.LaunchAtStartup;
-        VolumeSlider.Value = _settings.VoiceVolume;
-        RateSlider.Value = _settings.VoiceRate;
         BackgroundPathInput.Text = _settings.BackgroundPath;
         EndpointInput.Text = _settings.AiEndpoint;
         ModelInput.Text = _settings.AiModel;
         ApiKeyInput.Password = _settings.AiApiKey;
         SupportBackendInput.Text = _settings.SupportBackendUrl;
-        VoiceCombo.ItemsSource = _speechService.GetVoices();
-        VoiceCombo.SelectedItem = string.IsNullOrWhiteSpace(_settings.VoiceName) ? VoiceCombo.Items.Cast<object>().FirstOrDefault() : _settings.VoiceName;
-        TtsProviderCombo.SelectedIndex = _settings.TtsProvider == "Neural" ? 1 : 0;
-        NeuralVoiceCombo.SelectedIndex = _settings.NeuralVoice switch { "nova" => 1, "shimmer" => 2, "onyx" => 3, _ => 0 };
         ThemeCombo.SelectedIndex = _settings.Theme == "Light" ? 1 : 0;
         var microphones = _speechService.GetMicrophones();
         MicrophoneCombo.ItemsSource = microphones;
@@ -290,15 +281,9 @@ public partial class MainWindow : Window
     {
         _settings.WakeWord = string.IsNullOrWhiteSpace(WakeWordInput.Text) ? "помощник" : WakeWordInput.Text.Trim().ToLowerInvariant();
         _settings.ListenContinuously = ContinuousListeningCheck.IsChecked == true;
-        _settings.SpeakResponses = SpeakResponsesCheck.IsChecked == true;
         _settings.ConfirmSensitiveActions = ConfirmSensitiveCheck.IsChecked == true;
         _settings.LaunchAtStartup = LaunchAtStartupCheck.IsChecked == true;
-        _settings.VoiceName = VoiceCombo.SelectedItem?.ToString() ?? "";
-        _settings.TtsProvider = (TtsProviderCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Windows";
-        _settings.NeuralVoice = (NeuralVoiceCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "alloy";
         _settings.MicrophoneDeviceNumber = (MicrophoneCombo.SelectedItem as MicrophoneOption)?.DeviceNumber ?? 0;
-        _settings.VoiceVolume = (int)VolumeSlider.Value;
-        _settings.VoiceRate = (int)RateSlider.Value;
         _settings.Theme = (ThemeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Dark";
         _settings.BackgroundPath = BackgroundPathInput.Text;
         _settings.AiEndpoint = EndpointInput.Text.Trim();
@@ -371,17 +356,6 @@ public partial class MainWindow : Window
         StartListening();
         TranscriptText.Text = "Говорите — текст должен появляться в строке ввода";
         Navigate(0, HomeNav);
-    }
-
-    private void PreviewVoice_OnClick(object sender, RoutedEventArgs e)
-    {
-        _settings.VoiceName = VoiceCombo.SelectedItem?.ToString() ?? "";
-        _settings.TtsProvider = (TtsProviderCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Windows";
-        _settings.NeuralVoice = (NeuralVoiceCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "alloy";
-        _settings.VoiceVolume = (int)VolumeSlider.Value;
-        _settings.VoiceRate = (int)RateSlider.Value;
-        _speechService.Configure(_settings);
-        _speechService.PreviewVoice();
     }
 
     private async void GoogleLogin_OnClick(object sender, RoutedEventArgs e)

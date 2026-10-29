@@ -1,8 +1,5 @@
-using System.Speech.Synthesis;
 using System.Text.Json;
 using System.IO;
-using System.Net.Http;
-using System.Text;
 using DesmodAssistant.Models;
 using NAudio.Wave;
 using Vosk;
@@ -16,27 +13,17 @@ public sealed record MicrophoneOption(int DeviceNumber, string Name)
 
 public sealed class SpeechService : IDisposable
 {
-    private readonly SpeechSynthesizer _synthesizer = new();
-    private readonly HttpClient _http = new();
     private AssistantSettings _settings = new();
     private WaveInEvent? _waveIn;
     private Model? _model;
     private VoskRecognizer? _recognizer;
     private bool _running;
     private readonly object _recognizerLock = new();
-    private WaveOutEvent? _voiceOutput;
-    private Mp3FileReader? _voiceReader;
-    private MemoryStream? _voiceStream;
 
     public event Action<string, float>? Heard;
     public event Action<string>? PartialHeard;
     public event Action<string>? StatusChanged;
     public event Action<double>? AudioLevelChanged;
-
-    public IReadOnlyList<string> GetVoices() => _synthesizer.GetInstalledVoices()
-        .Where(v => v.Enabled)
-        .Select(v => v.VoiceInfo.Name)
-        .ToList();
 
     public IReadOnlyList<MicrophoneOption> GetMicrophones()
     {
@@ -52,10 +39,6 @@ public sealed class SpeechService : IDisposable
     public void Configure(AssistantSettings settings)
     {
         _settings = settings;
-        _synthesizer.Volume = Math.Clamp(settings.VoiceVolume, 0, 100);
-        _synthesizer.Rate = Math.Clamp(settings.VoiceRate, -10, 10);
-        if (!string.IsNullOrWhiteSpace(settings.VoiceName) && GetVoices().Contains(settings.VoiceName))
-            _synthesizer.SelectVoice(settings.VoiceName);
     }
 
     public void Start()
@@ -128,57 +111,6 @@ public sealed class SpeechService : IDisposable
         StatusChanged?.Invoke("Прослушивание выключено");
     }
 
-    public void Speak(string text)
-    {
-        if (!_settings.SpeakResponses || string.IsNullOrWhiteSpace(text)) return;
-        if (_settings.TtsProvider == "Neural" && !string.IsNullOrWhiteSpace(_settings.AiApiKey))
-        {
-            _ = SpeakNeuralAsync(text);
-            return;
-        }
-        _synthesizer.SpeakAsyncCancelAll();
-        _synthesizer.SpeakAsync(text);
-    }
-
-    private async Task SpeakNeuralAsync(string text)
-    {
-        try
-        {
-            var endpoint = _settings.AiEndpoint.Replace("/responses", "/audio/speech", StringComparison.OrdinalIgnoreCase);
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _settings.AiApiKey);
-            request.Content = new StringContent(JsonSerializer.Serialize(new
-            {
-                model = "gpt-4o-mini-tts",
-                voice = _settings.NeuralVoice,
-                input = text,
-                format = "mp3"
-            }), Encoding.UTF8, "application/json");
-            using var response = await _http.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            var audio = await response.Content.ReadAsByteArrayAsync();
-            _voiceOutput?.Stop();
-            _voiceOutput?.Dispose();
-            _voiceReader?.Dispose();
-            _voiceStream?.Dispose();
-            _voiceStream = new MemoryStream(audio);
-            _voiceReader = new Mp3FileReader(_voiceStream);
-            _voiceOutput = new WaveOutEvent { Volume = Math.Clamp(_settings.VoiceVolume / 100f, 0, 1) };
-            _voiceOutput.Init(_voiceReader);
-            _voiceOutput.Play();
-        }
-        catch
-        {
-            _synthesizer.SpeakAsyncCancelAll();
-            _synthesizer.SpeakAsync(text);
-        }
-    }
-
-    public void PreviewVoice()
-    {
-        Speak("Привет. Я Desmod Assistant. Этот голос можно изменить в настройках.");
-    }
-
     private void OnAudioData(object? sender, WaveInEventArgs e)
     {
         if (e.BytesRecorded == 0) return;
@@ -233,10 +165,5 @@ public sealed class SpeechService : IDisposable
     {
         Stop();
         _model?.Dispose();
-        _voiceOutput?.Dispose();
-        _voiceReader?.Dispose();
-        _voiceStream?.Dispose();
-        _http.Dispose();
-        _synthesizer.Dispose();
     }
 }

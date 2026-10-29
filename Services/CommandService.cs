@@ -92,10 +92,15 @@ public sealed class CommandService
         if (!string.IsNullOrWhiteSpace(freeTarget))
         {
             var openIntent = command.Contains("открой", StringComparison.OrdinalIgnoreCase) || command.Contains("запусти", StringComparison.OrdinalIgnoreCase);
+            if (openIntent)
+            {
+                var localResult = OpenAnyApp(freeTarget, $"Запускаю: {freeTarget}");
+                if (localResult.Success) return localResult;
+            }
             if (openIntent && TryResolveKnownWebsite(freeTarget, out var directUrl))
                 return OpenUrl(directUrl, $"Открываю: {freeTarget}");
-            var search = openIntent ? freeTarget + " официальный сайт" : freeTarget;
-            return OpenUrl($"https://www.google.com/search?q={Uri.EscapeDataString(search)}", openIntent ? $"Показываю официальный результат: {freeTarget}" : $"Ищу: {freeTarget}");
+            if (openIntent) return new(false, $"Приложение «{freeTarget}» не найдено среди установленных программ и игр");
+            return OpenUrl($"https://www.google.com/search?q={Uri.EscapeDataString(freeTarget)}", $"Ищу: {freeTarget}");
         }
 
         return new(false, "Для свободного понимания любых команд подключите ИИ-провайдера в настройках");
@@ -158,6 +163,7 @@ public sealed class CommandService
     private static CommandResult OpenAnyApp(string target, string reply)
     {
         if (string.IsNullOrWhiteSpace(target)) return new(false, "ИИ не указал приложение");
+        target = CleanLaunchTarget(target);
         var roots = new[]
         {
             Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
@@ -178,15 +184,58 @@ public sealed class CommandService
             }
             catch { }
         }
-        try
+        var steamResult = TryLaunchSteamGame(target, reply);
+        return steamResult ?? new(false, $"Приложение «{target}» не найдено");
+    }
+
+    private static string CleanLaunchTarget(string target)
+    {
+        var cleaned = target.Trim(' ', ',', '.', '!', '?', ':', '-');
+        foreach (var prefix in new[] { "игру ", "приложение ", "программу ", "лаунчер " })
+            if (cleaned.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) cleaned = cleaned[prefix.Length..].Trim();
+        return cleaned;
+    }
+
+    private static CommandResult? TryLaunchSteamGame(string target, string reply)
+    {
+        var steamAppsFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var steamRoot in new[] { @"C:\Program Files (x86)\Steam", @"C:\Program Files\Steam" })
         {
-            Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
-            return new(true, reply);
+            var defaultApps = Path.Combine(steamRoot, "steamapps");
+            if (Directory.Exists(defaultApps)) steamAppsFolders.Add(defaultApps);
+            var librariesFile = Path.Combine(defaultApps, "libraryfolders.vdf");
+            if (!File.Exists(librariesFile)) continue;
+            try
+            {
+                var text = File.ReadAllText(librariesFile);
+                foreach (Match match in Regex.Matches(text, "\\\"path\\\"\\s+\\\"(?<path>[^\\\"]+)\\\""))
+                {
+                    var path = match.Groups["path"].Value.Replace("\\\\", "\\");
+                    var apps = Path.Combine(path, "steamapps");
+                    if (Directory.Exists(apps)) steamAppsFolders.Add(apps);
+                }
+            }
+            catch { }
         }
-        catch
+
+        foreach (var folder in steamAppsFolders)
         {
-            return OpenUrl($"https://www.google.com/search?q={Uri.EscapeDataString(target + " скачать официальный сайт")}", $"Приложение не найдено — открываю официальный поиск: {target}");
+            foreach (var manifest in Directory.EnumerateFiles(folder, "appmanifest_*.acf", SearchOption.TopDirectoryOnly))
+            {
+                try
+                {
+                    var text = File.ReadAllText(manifest);
+                    var name = Regex.Match(text, "\\\"name\\\"\\s+\\\"(?<value>[^\\\"]+)\\\"").Groups["value"].Value;
+                    var appId = Regex.Match(text, "\\\"appid\\\"\\s+\\\"(?<value>\\d+)\\\"").Groups["value"].Value;
+                    if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(appId)) continue;
+                    if (!name.Contains(target, StringComparison.OrdinalIgnoreCase) && !target.Contains(name, StringComparison.OrdinalIgnoreCase)) continue;
+                    Process.Start(new ProcessStartInfo($"steam://rungameid/{appId}") { UseShellExecute = true });
+                    return new(true, reply);
+                }
+                catch { }
+            }
         }
+        return null;
     }
 
     private static CommandResult CaptureScreenshot()

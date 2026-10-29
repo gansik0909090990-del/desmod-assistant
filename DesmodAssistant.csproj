@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>Desmod.Assistant</AssemblyName>
     <RootNamespace>DesmodAssistant</RootNamespace>
-    <Version>1.1.9</Version>
+    <Version>1.1.10</Version>
     <DefaultItemExcludes>$(DefaultItemExcludes);publish\**;release\**;artifacts\**;model-cache\**</DefaultItemExcludes>
     <GoogleOAuthClientId>675488933296-8b4rh2lndbfcjfpun01fe2ub20kvctbu.apps.googleusercontent.com</GoogleOAuthClientId>
   </PropertyGroup>

@@ -284,13 +284,13 @@ public sealed class CommandService
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
 
-    private static void PressMediaPlay()
+    private static void PressSpace()
     {
-        const byte mediaPlayPause = 0xB3;
+        const byte space = 0x20;
         const uint keyUp = 0x0002;
-        keybd_event(mediaPlayPause, 0, 0, UIntPtr.Zero);
+        keybd_event(space, 0, 0, UIntPtr.Zero);
         Thread.Sleep(40);
-        keybd_event(mediaPlayPause, 0, keyUp, UIntPtr.Zero);
+        keybd_event(space, 0, keyUp, UIntPtr.Zero);
     }
 
     private static CommandResult OpenUrl(string url, string message)
@@ -392,11 +392,11 @@ public sealed class CommandService
             var title = track.GetProperty("title").GetString() ?? query;
             var albumId = track.GetProperty("albums")[0].GetProperty("id").ToString();
             var artist = track.GetProperty("artists")[0].GetProperty("name").GetString() ?? "";
-            var result = OpenUrl($"https://music.yandex.ru/album/{albumId}/track/{trackId}", $"Нашёл {artist} — {title}");
+            var result = OpenUrl($"https://music.yandex.ru/iframe/#track/{trackId}/{albumId}", $"Нашёл {artist} — {title}");
             if (!result.Success) return result;
 
             await Task.Delay(3500);
-            PressMediaPlay();
+            PressSpace();
             return new(true, $"Включаю {artist} — {title}");
         }
         catch
@@ -431,10 +431,10 @@ public sealed class CommandService
         var trackId = track.GetProperty("id").ToString();
         var albumId = track.GetProperty("albums")[0].GetProperty("id").ToString();
         var title = track.GetProperty("title").GetString() ?? "популярный трек";
-        var result = OpenUrl($"https://music.yandex.ru/album/{albumId}/track/{trackId}", $"Открываю {artistName} — {title}");
+        var result = OpenUrl($"https://music.yandex.ru/iframe/#track/{trackId}/{albumId}", $"Открываю {artistName} — {title}");
         if (!result.Success) return result;
         await Task.Delay(3500);
-        PressMediaPlay();
+        PressSpace();
         return new(true, $"Включаю исполнителя {artistName}: {title}");
     }
 

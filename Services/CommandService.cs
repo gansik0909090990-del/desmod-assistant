@@ -55,6 +55,10 @@ public sealed class CommandService
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CapCut", "Apps", "CapCut.exe")
             });
 
+        if (ContainsAny(command, "яндекс музыка", "яндекс музыке", "яндекс музыку", "yandex music") &&
+            ContainsAny(command, "включи", "поставь", "запусти", "найди песню", "найди трек"))
+            return await OpenYandexMusicTrackAsync(command);
+
         if (ContainsAny(command, "скриншот", "скриншоты", "снимок экрана", "скрин экрана", "заскринь", "сделай скрин"))
             return CaptureScreenshot();
 
@@ -231,6 +235,15 @@ public sealed class CommandService
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
 
+    private static void PressMediaPlay()
+    {
+        const byte mediaPlayPause = 0xB3;
+        const uint keyUp = 0x0002;
+        keybd_event(mediaPlayPause, 0, 0, UIntPtr.Zero);
+        Thread.Sleep(40);
+        keybd_event(mediaPlayPause, 0, keyUp, UIntPtr.Zero);
+    }
+
     private static CommandResult OpenUrl(string url, string message)
     {
         try
@@ -290,6 +303,51 @@ public sealed class CommandService
         catch
         {
             return OpenUrl($"https://www.youtube.com/results?search_query={Uri.EscapeDataString(query)}&sp=CAI%253D", $"Открываю свежие видео: {query}");
+        }
+    }
+
+    private async Task<CommandResult> OpenYandexMusicTrackAsync(string command)
+    {
+        var query = command;
+        var removable = new[]
+        {
+            "открой яндекс музыку и", "открой яндекс музыка и", "в яндекс музыке",
+            "на яндекс музыке", "яндекс музыка", "яндекс музыку", "yandex music",
+            "включи мне", "включи", "поставь мне", "поставь", "запусти",
+            "найди песню", "найди трек", "песню", "трек"
+        };
+        foreach (var value in removable)
+            query = query.Replace(value, " ", StringComparison.OrdinalIgnoreCase);
+        query = Regex.Replace(query, "\\s+", " ").Trim(' ', ',', '.', '!', '?', ':', '-');
+
+        if (string.IsNullOrWhiteSpace(query))
+            return OpenUrl("https://music.yandex.ru/", "Открываю Яндекс Музыку");
+
+        try
+        {
+            var searchUrl = $"https://api.music.yandex.net/search?text={Uri.EscapeDataString(query)}&type=track&page=0&nocorrect=false";
+            using var response = await _http.GetAsync(searchUrl);
+            response.EnsureSuccessStatusCode();
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var tracks = document.RootElement.GetProperty("result").GetProperty("tracks").GetProperty("results");
+            if (tracks.GetArrayLength() == 0)
+                return OpenUrl($"https://music.yandex.ru/search?text={Uri.EscapeDataString(query)}", $"Открываю поиск: {query}");
+
+            var track = tracks[0];
+            var trackId = track.GetProperty("id").ToString();
+            var title = track.GetProperty("title").GetString() ?? query;
+            var albumId = track.GetProperty("albums")[0].GetProperty("id").ToString();
+            var artist = track.GetProperty("artists")[0].GetProperty("name").GetString() ?? "";
+            var result = OpenUrl($"https://music.yandex.ru/album/{albumId}/track/{trackId}", $"Нашёл {artist} — {title}");
+            if (!result.Success) return result;
+
+            await Task.Delay(3500);
+            PressMediaPlay();
+            return new(true, $"Включаю {artist} — {title}");
+        }
+        catch
+        {
+            return OpenUrl($"https://music.yandex.ru/search?text={Uri.EscapeDataString(query)}", $"Открываю поиск трека: {query}");
         }
     }
 

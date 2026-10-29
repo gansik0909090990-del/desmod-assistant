@@ -19,7 +19,7 @@ public sealed class GoogleAuthService
         var verifier = Base64Url(RandomNumberGenerator.GetBytes(48));
         var challenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
         var port = GetFreePort();
-        var redirectUri = $"http://127.0.0.1:{port}/callback/";
+        var redirectUri = $"http://127.0.0.1:{port}/";
 
         using var listener = new HttpListener();
         listener.Prefixes.Add(redirectUri);
@@ -63,8 +63,13 @@ public sealed class GoogleAuthService
             ["grant_type"] = "authorization_code",
             ["redirect_uri"] = redirectUri
         }), timeout.Token);
-        tokenResponse.EnsureSuccessStatusCode();
-        using var tokenDocument = JsonDocument.Parse(await tokenResponse.Content.ReadAsStringAsync(timeout.Token));
+        var tokenJson = await tokenResponse.Content.ReadAsStringAsync(timeout.Token);
+        if (!tokenResponse.IsSuccessStatusCode)
+        {
+            var detail = TryReadGoogleError(tokenJson);
+            throw new InvalidOperationException("Google отклонил вход: " + detail);
+        }
+        using var tokenDocument = JsonDocument.Parse(tokenJson);
         var idToken = tokenDocument.RootElement.GetProperty("id_token").GetString() ?? throw new InvalidOperationException("Google не вернул ID token");
         var infoJson = await _http.GetStringAsync("https://oauth2.googleapis.com/tokeninfo?id_token=" + Uri.EscapeDataString(idToken), timeout.Token);
         using var info = JsonDocument.Parse(infoJson);
@@ -87,4 +92,20 @@ public sealed class GoogleAuthService
     }
 
     private static string Base64Url(byte[] value) => Convert.ToBase64String(value).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private static string TryReadGoogleError(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            var error = root.TryGetProperty("error", out var errorElement) ? errorElement.GetString() : null;
+            var description = root.TryGetProperty("error_description", out var descriptionElement) ? descriptionElement.GetString() : null;
+            return string.Join(": ", new[] { error, description }.Where(value => !string.IsNullOrWhiteSpace(value)));
+        }
+        catch
+        {
+            return "неверные параметры OAuth";
+        }
+    }
 }

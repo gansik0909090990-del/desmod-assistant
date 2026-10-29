@@ -55,9 +55,14 @@ public sealed class CommandService
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CapCut", "Apps", "CapCut.exe")
             });
 
-        if (ContainsAny(command, "яндекс музыка", "яндекс музыке", "яндекс музыку", "yandex music") &&
-            ContainsAny(command, "включи", "поставь", "запусти", "найди песню", "найди трек"))
+        var directMusicIntent = ContainsAny(command, "включи трек", "включи песню", "поставь трек", "поставь песню", "запусти трек", "запусти песню");
+        var yandexMusicIntent = ContainsAny(command, "яндекс музыка", "яндекс музыке", "яндекс музыку", "yandex music") &&
+                                ContainsAny(command, "включи", "поставь", "запусти", "найди песню", "найди трек");
+        if (directMusicIntent || yandexMusicIntent)
             return await OpenYandexMusicTrackAsync(command);
+
+        if (command.StartsWith("скажи ", StringComparison.OrdinalIgnoreCase))
+            return new(true, command[6..].Trim());
 
         if (ContainsAny(command, "скриншот", "скриншоты", "снимок экрана", "скрин экрана", "заскринь", "сделай скрин"))
             return CaptureScreenshot();

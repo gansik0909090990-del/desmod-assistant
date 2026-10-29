@@ -415,7 +415,9 @@ public sealed class CommandService
         if (artists.GetArrayLength() == 0)
             return OpenUrl($"https://music.yandex.ru/search?text={Uri.EscapeDataString(query)}", $"Открываю поиск исполнителя: {query}");
 
-        var artist = artists[0];
+        var artist = artists.EnumerateArray()
+            .FirstOrDefault(candidate => string.Equals(candidate.GetProperty("name").GetString(), query, StringComparison.OrdinalIgnoreCase));
+        if (artist.ValueKind == JsonValueKind.Undefined) artist = artists[0];
         var artistId = artist.GetProperty("id").ToString();
         var artistName = artist.GetProperty("name").GetString() ?? query;
         using var infoResponse = await _http.GetAsync($"https://api.music.yandex.net/artists/{artistId}/brief-info");

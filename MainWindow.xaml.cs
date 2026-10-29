@@ -179,14 +179,17 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(async () =>
         {
-            TranscriptText.Text = $"Распознано: «{text}» · уверенность {confidence:P0}";
-            CommandInput.Text = text;
+            var normalizedText = NormalizeRecognizedCommand(text);
+            TranscriptText.Text = normalizedText.Equals(text, StringComparison.OrdinalIgnoreCase)
+                ? $"Распознано: «{text}» · уверенность {confidence:P0}"
+                : $"Распознано: «{text}» → команда: «{normalizedText}»";
+            CommandInput.Text = normalizedText;
             CommandInput.CaretIndex = CommandInput.Text.Length;
             var wakeWord = _settings.WakeWord.Trim();
-            var index = text.IndexOf(wakeWord, StringComparison.OrdinalIgnoreCase);
+            var index = normalizedText.IndexOf(wakeWord, StringComparison.OrdinalIgnoreCase);
             var command = index >= 0
-                ? text.Remove(index, wakeWord.Length).Trim(' ', ',', '.', '!', '?', ':', '-')
-                : text.Trim(' ', ',', '.', '!', '?', ':', '-');
+                ? normalizedText.Remove(index, wakeWord.Length).Trim(' ', ',', '.', '!', '?', ':', '-')
+                : normalizedText.Trim(' ', ',', '.', '!', '?', ':', '-');
             if (string.IsNullOrWhiteSpace(command))
             {
                 ListeningTitle.Text = "Слушаю команду";
@@ -195,6 +198,26 @@ public partial class MainWindow : Window
 
             await ExecuteCommandAsync(command);
         });
+    }
+
+    private static string NormalizeRecognizedCommand(string text)
+    {
+        var normalized = text.ToLowerInvariant().Replace('ё', 'е');
+        var replacements = new (string Pattern, string Value)[]
+        {
+            (@"\b(открою|открыть|откройте)\b", "открой"),
+            (@"\b(запустить|запускай|запусти-ка)\b", "запусти"),
+            (@"\b(в ключи|включить|включай)\b", "включи"),
+            (@"\bскрин\s+шот\b", "скриншот"),
+            (@"\b(стимм|steam)\b", "стим"),
+            (@"\bяндекс\s+музыка\b", "яндекс музыку"),
+            (@"\bяндекс\s+музыке\b", "яндекс музыке"),
+            (@"\bдота\s+два\b", "дота 2")
+        };
+        foreach (var replacement in replacements)
+            normalized = System.Text.RegularExpressions.Regex.Replace(normalized, replacement.Pattern, replacement.Value,
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return System.Text.RegularExpressions.Regex.Replace(normalized, @"\s+", " ").Trim();
     }
 
     private void OnPartialSpeechHeard(string text)

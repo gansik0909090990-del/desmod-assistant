@@ -357,13 +357,15 @@ public sealed class CommandService
 
     private async Task<CommandResult> OpenYandexMusicTrackAsync(string command)
     {
+        var artistIntent = ContainsAny(command, "исполнителя", "исполнитель", "артиста", "артист", "группу");
         var query = command;
         var removable = new[]
         {
             "открой яндекс музыку и", "открой яндекс музыка и", "в яндекс музыке",
-            "на яндекс музыке", "яндекс музыка", "яндекс музыку", "yandex music",
+            "на яндекс музыке", "яндекс музыка", "яндекс музыку", "yandex music", "в ней",
             "включи мне", "включи", "поставь мне", "поставь", "запусти",
-            "найди песню", "найди трек", "песню", "трек"
+            "найди песню", "найди трек", "исполнителя", "исполнитель", "артиста", "артист",
+            "группу", "песни", "песню", "треки", "трек"
         };
         foreach (var value in removable)
             query = query.Replace(value, " ", StringComparison.OrdinalIgnoreCase);
@@ -374,6 +376,9 @@ public sealed class CommandService
 
         try
         {
+            if (artistIntent)
+                return await OpenYandexArtistAsync(query);
+
             var searchUrl = $"https://api.music.yandex.net/search?text={Uri.EscapeDataString(query)}&type=track&page=0&nocorrect=false";
             using var response = await _http.GetAsync(searchUrl);
             response.EnsureSuccessStatusCode();
@@ -398,6 +403,37 @@ public sealed class CommandService
         {
             return OpenUrl($"https://music.yandex.ru/search?text={Uri.EscapeDataString(query)}", $"Открываю поиск трека: {query}");
         }
+    }
+
+    private async Task<CommandResult> OpenYandexArtistAsync(string query)
+    {
+        var searchUrl = $"https://api.music.yandex.net/search?text={Uri.EscapeDataString(query)}&type=artist&page=0&nocorrect=false";
+        using var response = await _http.GetAsync(searchUrl);
+        response.EnsureSuccessStatusCode();
+        using var searchDocument = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var artists = searchDocument.RootElement.GetProperty("result").GetProperty("artists").GetProperty("results");
+        if (artists.GetArrayLength() == 0)
+            return OpenUrl($"https://music.yandex.ru/search?text={Uri.EscapeDataString(query)}", $"Открываю поиск исполнителя: {query}");
+
+        var artist = artists[0];
+        var artistId = artist.GetProperty("id").ToString();
+        var artistName = artist.GetProperty("name").GetString() ?? query;
+        using var infoResponse = await _http.GetAsync($"https://api.music.yandex.net/artists/{artistId}/brief-info");
+        infoResponse.EnsureSuccessStatusCode();
+        using var infoDocument = JsonDocument.Parse(await infoResponse.Content.ReadAsStringAsync());
+        var tracks = infoDocument.RootElement.GetProperty("result").GetProperty("popularTracks");
+        if (tracks.GetArrayLength() == 0)
+            return OpenUrl($"https://music.yandex.ru/artist/{artistId}", $"Открываю исполнителя: {artistName}");
+
+        var track = tracks[0];
+        var trackId = track.GetProperty("id").ToString();
+        var albumId = track.GetProperty("albums")[0].GetProperty("id").ToString();
+        var title = track.GetProperty("title").GetString() ?? "популярный трек";
+        var result = OpenUrl($"https://music.yandex.ru/album/{albumId}/track/{trackId}", $"Открываю {artistName} — {title}");
+        if (!result.Success) return result;
+        await Task.Delay(3500);
+        PressMediaPlay();
+        return new(true, $"Включаю исполнителя {artistName}: {title}");
     }
 
     private static string CleanYouTubeQuery(string query)

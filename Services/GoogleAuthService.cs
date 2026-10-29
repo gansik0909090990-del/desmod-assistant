@@ -12,7 +12,7 @@ public sealed class GoogleAuthService
 {
     private readonly HttpClient _http = new();
 
-    public async Task<UserSession> SignInAsync(string clientId, Func<string, string> roleResolver, CancellationToken cancellationToken = default)
+    public async Task<UserSession> SignInAsync(string clientId, string clientSecret, Func<string, string> roleResolver, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(clientId)) throw new InvalidOperationException("Сначала укажите Google OAuth Client ID в настройках");
         var state = Base64Url(RandomNumberGenerator.GetBytes(24));
@@ -55,14 +55,16 @@ public sealed class GoogleAuthService
 
         if (returnedState != state) throw new InvalidOperationException("Проверка Google state не пройдена");
         var code = authorizationCode ?? throw new InvalidOperationException(authorizationError ?? "Google не вернул код входа");
-        using var tokenResponse = await _http.PostAsync("https://oauth2.googleapis.com/token", new FormUrlEncodedContent(new Dictionary<string, string>
+        var tokenFields = new Dictionary<string, string>
         {
             ["client_id"] = clientId,
             ["code"] = code,
             ["code_verifier"] = verifier,
             ["grant_type"] = "authorization_code",
             ["redirect_uri"] = redirectUri
-        }), timeout.Token);
+        };
+        if (!string.IsNullOrWhiteSpace(clientSecret)) tokenFields["client_secret"] = clientSecret;
+        using var tokenResponse = await _http.PostAsync("https://oauth2.googleapis.com/token", new FormUrlEncodedContent(tokenFields), timeout.Token);
         var tokenJson = await tokenResponse.Content.ReadAsStringAsync(timeout.Token);
         if (!tokenResponse.IsSuccessStatusCode)
         {

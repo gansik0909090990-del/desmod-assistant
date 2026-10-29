@@ -17,4 +17,16 @@ public static class BuildConfiguration
                 : embedded;
         }
     }
+
+    public static string GoogleOAuthClientSecret => ReadMetadata("GoogleOAuthClientSecret", "DESMOD_GOOGLE_OAUTH_CLIENT_SECRET");
+
+    private static string ReadMetadata(string key, string environmentVariable)
+    {
+        var embedded = Assembly.GetExecutingAssembly()
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(attribute => attribute.Key == key)?.Value;
+        return string.IsNullOrWhiteSpace(embedded)
+            ? Environment.GetEnvironmentVariable(environmentVariable) ?? ""
+            : embedded;
+    }
 }

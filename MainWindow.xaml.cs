@@ -394,7 +394,7 @@ public partial class MainWindow : Window
             }
             GoogleLoginButton.IsEnabled = false;
             AccountTitle.Text = "Ожидаю вход Google…";
-            _currentUser = await _googleAuthService.SignInAsync(googleClientId, _supportService.ResolveRole);
+            _currentUser = await _googleAuthService.SignInAsync(googleClientId, BuildConfiguration.GoogleOAuthClientSecret, _supportService.ResolveRole);
             AccountTitle.Text = _currentUser.Name;
             AccountDetails.Text = $"{_currentUser.Email} · роль: {_currentUser.Role}";
             GoogleLoginButton.Content = "Сменить аккаунт";
